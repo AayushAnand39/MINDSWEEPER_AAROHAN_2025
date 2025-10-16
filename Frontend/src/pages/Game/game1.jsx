@@ -81,9 +81,9 @@ const LightGridGame = () => {
     const newGrid = applyClick(grid, r, c);
     setGrid(newGrid);
 
-    if (isAllZeros(newGrid)) {
-      onSolved(newGrid);
-    }
+    // if (isAllZeros(newGrid)) {
+    //   onSolved(newGrid);
+    // }
   };
 
   const undo = () => {
