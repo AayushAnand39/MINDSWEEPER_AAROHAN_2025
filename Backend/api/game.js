@@ -111,10 +111,12 @@ router.get('/generate-game', async (req, res) => {
  * POST /api/validate-game
  * Body:
  *  - gameId (required)
- *  - grid OR moves (one required)
+ *  - moves (required) — array of { r, c } entries
+ *  - grid (optional) — if provided, must match the result of applying moves
  *  - email (optional, used to credit points on existing User)
  *
- * If solved: awards points to existing User (if email provided and user exists),
+ * Server computes the final grid by replaying "moves" on the saved initialGrid.
+ * If solved (all zeros): awards points to existing User (if email provided and user exists),
  * then generates and returns a new puzzle in the response.
  */
 const POINTS_PER_WIN = 75;
@@ -131,23 +133,29 @@ router.post('/validate-game', async (req, res) => {
       return res.status(404).json({ validGame: false, solved: false, message: 'Game not found or expired' });
     }
 
-    // determine finalGrid by replaying moves or using provided grid
-    let finalGrid;
+    // determine finalGrid by replaying moves on the server from initialGrid (authoritative)
+    if (!Array.isArray(moves)) {
+      return res.status(400).json({ validGame: false, solved: false, message: 'Provide moves as an array of {r,c}' });
+    }
+
+    let finalGrid = cloneGrid(game.initialGrid);
+    for (const mv of moves) {
+      if (typeof mv !== 'object' || typeof mv.r !== 'number' || typeof mv.c !== 'number') {
+        return res.status(400).json({ validGame: false, solved: false, message: 'Invalid move format' });
+      }
+      applyToggleOnce(finalGrid, mv.r, mv.c);
+    }
+
+    // If client provided grid, cross-check it matches the server-replayed result
     if (Array.isArray(grid)) {
       if (grid.length !== 3 || grid.some(r => !Array.isArray(r) || r.length !== 3)) {
         return res.status(400).json({ validGame: false, solved: false, message: 'Invalid grid format' });
       }
-      finalGrid = grid.map(row => row.map(cell => Number(cell) % 3));
-    } else if (Array.isArray(moves)) {
-      finalGrid = cloneGrid(game.initialGrid);
-      for (const mv of moves) {
-        if (typeof mv !== 'object' || typeof mv.r !== 'number' || typeof mv.c !== 'number') {
-          return res.status(400).json({ validGame: false, solved: false, message: 'Invalid move format' });
-        }
-        applyToggleOnce(finalGrid, mv.r, mv.c);
+      const clientGrid = grid.map(row => row.map(cell => ((Number(cell) % 3) + 3) % 3));
+      const mismatch = clientGrid.some((row, r) => row.some((cell, c) => cell !== (((Number(finalGrid[r][c]) % 3) + 3) % 3)));
+      if (mismatch) {
+        return res.status(400).json({ validGame: false, solved: false, message: 'Grid does not match provided moves' });
       }
-    } else {
-      return res.status(400).json({ validGame: false, solved: false, message: 'Provide either grid or moves' });
     }
 
     // normalize & validate cell values
