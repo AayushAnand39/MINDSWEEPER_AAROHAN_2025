@@ -100,7 +100,7 @@ router.get('/generate-game', async (req, res) => {
 
     await gameDoc.save();
 
-    return res.json({ gameId, grid: initialGrid, solutionToggles });
+    return res.json({ gameId, grid: initialGrid });
   } catch (err) {
     console.error('Error generating game:', err);
     return res.status(500).json({ error: 'Failed to generate game' });
